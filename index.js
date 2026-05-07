@@ -1,40 +1,125 @@
 const {
   default: makeWASocket,
   useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion
-} = require('@whiskeysockets/baileys')
+  fetchLatestBaileysVersion,
+  DisconnectReason
+} = require("@whiskeysockets/baileys");
 
-const P = require('pino')
-const fs = require('fs')
-const chalk = require('chalk')
-const figlet = require('figlet')
-const config = require('./config')
-
-console.log(
-  chalk.green(
-    figlet.textSync('MOON-MD')
-  )
-)
+const fs = require("fs");
+const P = require("pino");
+const config = require("./config");
 
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('./session')
-  const { version } = await fetchLatestBaileysVersion()
+
+  const { state, saveCreds } =
+    await useMultiFileAuthState("./session");
+
+  const { version } =
+    await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
     version,
     auth: state,
     printQRInTerminal: false,
-    logger: P({ level: 'silent' })
-  })
+    logger: P({ level: "silent" })
+  });
 
+  // SAVE SESSION
+  sock.ev.on("creds.update", saveCreds);
+
+  // PAIR CODE SYSTEM
   if (!sock.authState.creds.registered) {
-    const phoneNumber = '923330975205'
-    const code = await sock.requestPairingCode(phoneNumber)
-    console.log(chalk.yellow(`PAIR CODE: ${code}`))
+
+    const phoneNumber = "923330975205";
+
+    const code = await sock.requestPairingCode(phoneNumber);
+
+    console.log(`
+╔══════════════════════╗
+   🌙 MOON-MD PAIR CODE
+╚══════════════════════╝
+
+PAIR CODE: ${code}
+
+LINK DEVICE:
+WhatsApp > Linked Devices
+> Link with phone number
+`);
   }
 
-  sock.ev.on('creds.update', saveCreds)
+  // CONNECTION UPDATE
+  sock.ev.on("connection.update", (update) => {
+
+    const { connection, lastDisconnect } = update;
+
+    if (connection === "open") {
+      console.log("🌙 MOON-MD CONNECTED SUCCESSFULLY");
+    }
+
+    if (connection === "close") {
+
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !==
+        DisconnectReason.loggedOut;
+
+      if (shouldReconnect) {
+        startBot();
+      }
+    }
+  });
+
+  // LOAD COMMANDS
+  const commands = new Map();
+
+  const commandFiles =
+    fs.readdirSync("./commands")
+      .filter(file => file.endsWith(".js"));
+
+  for (const file of commandFiles) {
+
+    const command = require(`./commands/${file}`);
+
+    commands.set(command.name, command);
+  }
+
+  // MESSAGE HANDLER
+  sock.ev.on("messages.upsert", async ({ messages }) => {
+
+    const msg = messages[0];
+
+    if (!msg.message) return;
+
+    const from = msg.key.remoteJid;
+
+    const body =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text ||
+      "";
+
+    const prefix = config.prefix || "/";
+
+    if (!body.startsWith(prefix)) return;
+
+    const args =
+      body.slice(prefix.length).trim().split(/ +/);
+
+    const cmdName = args.shift().toLowerCase();
+
+    const command = commands.get(cmdName);
+
+    if (command) {
+      try {
+        await command.run(sock, msg, args, config);
+      } catch (err) {
+        console.log("COMMAND ERROR:", err);
+      }
+    }
+
+  });
+
+}
+
+startBot();  sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0]
