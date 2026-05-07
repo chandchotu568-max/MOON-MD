@@ -1,6 +1,10 @@
 # 🌙 MOON-MD WhatsApp Bot
 
-Advanced Multi Device WhatsApp Bot with Pair Code System.
+🌙 MOON-MD WhatsApp Bot
+
+Advanced Multi Device WhatsApp Bot with AI, Group Tools, Downloaders, Pair Code System and Dark Hacker Menu.
+
+Deployable on Render, Railway, VPS and Termux.
 
 ## ⚡ Features
 
